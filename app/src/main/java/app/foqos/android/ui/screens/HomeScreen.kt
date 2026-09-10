@@ -236,7 +236,7 @@ private fun ActiveSessionCard(session: SessionWithProfile, viewModel: FoqosViewM
                 }
             }
 
-            if (profile.enableBreaks && strategy.allowsTimedBreaks) {
+            if (profile.breaksAllowed && strategy.allowsTimedBreaks) {
                 OutlinedButton(
                     onClick = { viewModel.toggleBreak() },
                     modifier = Modifier.weight(1f),
@@ -256,7 +256,7 @@ private fun ActiveSessionCard(session: SessionWithProfile, viewModel: FoqosViewM
             TextButton(onClick = { viewModel.resumeFromPause() }) { Text("Resume blocking now") }
         }
 
-        if (profile.enableEmergencyUnblock) {
+        if (profile.emergencyUnblockAllowed) {
             TextButton(onClick = { viewModel.emergencyUnblock() }) {
                 Text("Emergency unblock", color = MaterialTheme.colorScheme.error)
             }

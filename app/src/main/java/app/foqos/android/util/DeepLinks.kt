@@ -1,15 +1,26 @@
 package app.foqos.android.util
 
-import android.net.Uri
-
 /**
  * Foqos profile links. The iOS app writes `https://foqos.app/profile/<uuid>` to NFC tags and QR
  * codes, so tags written by either app work on both; `foqos://profile/<uuid>` is accepted too.
+ *
+ * Parsed by hand rather than with `android.net.Uri`: this is the check that decides whether a
+ * scanned token can unlock a block, and it belongs in code that a plain JVM test can exercise.
  */
 object DeepLinks {
 
     const val HTTPS_PREFIX = "https://foqos.app/profile/"
     const val SCHEME_PREFIX = "foqos://profile/"
+
+    private val prefixes = listOf(
+        SCHEME_PREFIX,
+        HTTPS_PREFIX,
+        "http://foqos.app/profile/",
+        "https://www.foqos.app/profile/",
+        "http://www.foqos.app/profile/",
+        "foqos.app/profile/",
+        "www.foqos.app/profile/",
+    )
 
     fun profileUrl(profileId: String): String = HTTPS_PREFIX + profileId
 
@@ -18,20 +29,13 @@ object DeepLinks {
         val raw = value?.trim().orEmpty()
         if (raw.isEmpty()) return null
 
-        val uri = runCatching { Uri.parse(raw) }.getOrNull() ?: return null
-        val segments = uri.pathSegments.orEmpty()
+        val path = raw.substringBefore('?').substringBefore('#')
+        val lower = path.lowercase()
 
-        val id = when {
-            uri.scheme.equals("foqos", ignoreCase = true) &&
-                uri.host.equals("profile", ignoreCase = true) -> segments.firstOrNull()
+        val prefix = prefixes.firstOrNull { lower.startsWith(it) } ?: return null
+        val id = path.substring(prefix.length).trim('/').substringBefore('/')
 
-            uri.host.equals("foqos.app", ignoreCase = true) &&
-                segments.firstOrNull() == "profile" -> segments.getOrNull(1)
-
-            else -> null
-        }
-
-        return id?.takeIf { isUuid(it) }
+        return id.takeIf { isUuid(it) }
     }
 
     private val uuidRegex =

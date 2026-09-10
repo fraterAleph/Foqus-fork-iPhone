@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import app.foqos.android.blocking.vpn.DomainBlockerVpnService
 import app.foqos.android.data.db.ProfileEntity
 import app.foqos.android.data.model.StrategyData
+import app.foqos.android.session.UnlockRules
 import app.foqos.android.strategy.Strategies
 import app.foqos.android.ui.FoqosViewModel
 import app.foqos.android.ui.Routes
@@ -140,6 +141,57 @@ fun ProfileEditScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+
+            item {
+                FoqosCard {
+                    ToggleRow(
+                        title = "Unlock only with an NFC tag",
+                        description = "The session ends when you scan the linked tag, and no " +
+                            "other way: no Stop button, no break, no emergency unblock, and no " +
+                            "QR code.",
+                        checked = current.nfcOnlyUnlock,
+                        onCheckedChange = { enabled ->
+                            profile = current.copy(
+                                nfcOnlyUnlock = enabled,
+                                // An NFC-only profile on a QR strategy could never be stopped by
+                                // the token its own strategy asks for, so move it onto NFC.
+                                strategyId = if (enabled && !strategy.usesNfc) {
+                                    Strategies.nfc.id
+                                } else {
+                                    current.strategyId
+                                },
+                            )
+                        },
+                    )
+
+                    if (current.nfcOnlyUnlock) {
+                        val linkedKeys = UnlockRules.hardNfcKeys(current.physicalUnblockItems)
+                        Text(
+                            if (linkedKeys.isEmpty()) {
+                                "No tag linked yet. The profile cannot start until you link one " +
+                                    "on its Tag / QR screen."
+                            } else {
+                                "${linkedKeys.size} tag(s) linked. Keep one somewhere you have " +
+                                    "to walk to."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (linkedKeys.isEmpty()) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        Text(
+                            "A profile cannot be edited while its session runs, so this cannot " +
+                                "be switched off from inside a block.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
                 }
             }
 
@@ -300,17 +352,20 @@ fun ProfileEditScreen(
                 FoqosCard {
                     ToggleRow(
                         title = "Allow breaks",
-                        description = if (strategy.allowsTimedBreaks) {
-                            "Pause blocking for a limited amount of time."
-                        } else {
-                            "This strategy uses pauses instead of breaks."
+                        description = when {
+                            current.nfcOnlyUnlock ->
+                                "Off while unlocking is NFC-only: a break is a way out of a " +
+                                    "session that does not need the tag."
+                            !strategy.allowsTimedBreaks ->
+                                "This strategy uses pauses instead of breaks."
+                            else -> "Pause blocking for a limited amount of time."
                         },
-                        checked = current.enableBreaks,
-                        enabled = strategy.allowsTimedBreaks,
+                        checked = current.breaksAllowed,
+                        enabled = strategy.allowsTimedBreaks && !current.nfcOnlyUnlock,
                         onCheckedChange = { profile = current.copy(enableBreaks = it) },
                     )
 
-                    if (current.enableBreaks && strategy.allowsTimedBreaks) {
+                    if (current.breaksAllowed && strategy.allowsTimedBreaks) {
                         Text("Break allowance: ${current.breakTimeInMinutes} min")
                         Slider(
                             value = current.breakTimeInMinutes.toFloat(),
@@ -328,21 +383,25 @@ fun ProfileEditScreen(
                         )
                     }
 
-                    ToggleRow(
-                        title = "Emergency unblock",
-                        description = "Spend one of your limited emergency unblocks to end a " +
-                            "session early.",
-                        checked = current.enableEmergencyUnblock,
-                        onCheckedChange = { profile = current.copy(enableEmergencyUnblock = it) },
-                    )
+                    if (!current.nfcOnlyUnlock) {
+                        ToggleRow(
+                            title = "Emergency unblock",
+                            description = "Spend one of your limited emergency unblocks to end a " +
+                                "session early.",
+                            checked = current.enableEmergencyUnblock,
+                            onCheckedChange = {
+                                profile = current.copy(enableEmergencyUnblock = it)
+                            },
+                        )
 
-                    ToggleRow(
-                        title = "Strict mode",
-                        description = "Refuse every stop that does not come from a saved tag or " +
-                            "code.",
-                        checked = current.enableStrictMode,
-                        onCheckedChange = { profile = current.copy(enableStrictMode = it) },
-                    )
+                        ToggleRow(
+                            title = "Strict mode",
+                            description = "Refuse every stop that does not come from a saved tag " +
+                                "or code.",
+                            checked = current.enableStrictMode,
+                            onCheckedChange = { profile = current.copy(enableStrictMode = it) },
+                        )
+                    }
                 }
             }
 

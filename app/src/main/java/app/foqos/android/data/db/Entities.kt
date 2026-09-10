@@ -16,7 +16,7 @@ data class ProfileEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val sortOrder: Int = 0,
-    val strategyId: String = "ManualBlockingStrategy",
+    val strategyId: String = "NFCBlockingStrategy",
     /** Strategy configuration, serialized [StrategyData]. */
     val strategyData: String? = null,
     /** Package names the profile acts on. Blocklist, or allowlist when [enableAllowMode]. */
@@ -31,18 +31,31 @@ data class ProfileEntity(
     val enableDomainBlocking: Boolean = false,
     /** Invert domain selection: resolve only the listed domains. */
     val enableAllowModeDomains: Boolean = false,
+    /**
+     * The out-of-the-box mode: the session ends only when a registered NFC tag is scanned.
+     * While it is on it forces strict mode on and breaks and emergency unblocks off, so there
+     * is no path out of a session that does not go through the tag.
+     */
+    val nfcOnlyUnlock: Boolean = true,
+
     /** Strict mode refuses every stop that is not a configured physical unblock item. */
     val enableStrictMode: Boolean = false,
     val enableBreaks: Boolean = false,
     val breakTimeInMinutes: Int = 15,
     val allowMultipleBreaks: Boolean = false,
     val askForStartSettings: Boolean = true,
-    val enableEmergencyUnblock: Boolean = true,
+    val enableEmergencyUnblock: Boolean = false,
     /** Nag notification interval while no session runs, in seconds. */
     val reminderTimeInSeconds: Int? = null,
     val customReminderMessage: String? = null,
     val colorHex: String = "#F5C542",
-)
+) {
+    // Effective flags. Every caller reads these rather than the stored ones, so NFC-only mode
+    // cannot be undercut by a stale toggle left behind from an earlier configuration.
+    val strictModeActive: Boolean get() = nfcOnlyUnlock || enableStrictMode
+    val breaksAllowed: Boolean get() = !nfcOnlyUnlock && enableBreaks
+    val emergencyUnblockAllowed: Boolean get() = !nfcOnlyUnlock && enableEmergencyUnblock
+}
 
 @Entity(
     tableName = "sessions",

@@ -63,11 +63,16 @@ object NfcTools {
         runCatching { adapter(activity)?.disableForegroundDispatch(activity) }
     }
 
-    /** The token a scanned tag represents: its NDEF payload, or its hardware id as a fallback. */
-    fun tokenFrom(intent: Intent): String? {
-        payloadFrom(intent)?.let { return it }
-        return tagIdFrom(intent)
-    }
+    /**
+     * Every token a scanned tag can be identified by: its NDEF payload and its hardware UID.
+     *
+     * Both are returned because either may be the one registered against a profile, and a tag
+     * that holds a Foqos link still has a UID underneath it. The UID is the valuable one — a
+     * link written on a tag can be copied into a QR code by anyone who reads it once, a UID
+     * cannot be reproduced from a photograph.
+     */
+    fun tokensFrom(intent: Intent): List<String> =
+        listOfNotNull(payloadFrom(intent), tagIdFrom(intent))
 
     fun payloadFrom(intent: Intent): String? {
         val messages = rawMessages(intent) ?: return null

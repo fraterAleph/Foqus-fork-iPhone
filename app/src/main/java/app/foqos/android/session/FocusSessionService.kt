@@ -157,7 +157,7 @@ class FocusSessionService : LifecycleService() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(openAppIntent())
 
-        if (profile.enableBreaks && strategy.allowsTimedBreaks && !session.isPauseActive) {
+        if (profile.breaksAllowed && strategy.allowsTimedBreaks && !session.isPauseActive) {
             val label = if (session.isBreakActive) "End break" else "Take a break"
             builder.addAction(0, label, openAppIntent())
         }

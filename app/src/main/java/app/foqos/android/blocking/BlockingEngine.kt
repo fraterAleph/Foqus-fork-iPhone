@@ -36,7 +36,7 @@ class BlockingEngine(private val context: Context) {
                 profileName = profile.name,
                 packages = packages,
                 allowMode = profile.enableAllowMode,
-                strict = profile.enableStrictMode,
+                strict = profile.strictModeActive,
                 suspended = false,
                 temporarilyAllowed = emptySet(),
             ),

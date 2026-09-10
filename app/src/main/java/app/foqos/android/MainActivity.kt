@@ -14,6 +14,7 @@ import app.foqos.android.nfc.NfcTools
 import app.foqos.android.session.TokenSource
 import app.foqos.android.ui.FoqosApp
 import app.foqos.android.ui.FoqosViewModel
+import app.foqos.android.ui.TagAction
 import app.foqos.android.ui.theme.FoqosTheme
 import app.foqos.android.util.DeepLinks
 import kotlinx.coroutines.launch
@@ -22,8 +23,11 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: FoqosViewModel by viewModels()
 
-    /** Set while the user is on the "write this profile to a tag" screen. */
-    private var pendingTagWriteUrl: String? by mutableStateOf(null)
+    /**
+     * What the next tag held to the phone should do, set while the user is on a profile's
+     * Tag / QR screen. Null means a scan toggles a session as usual.
+     */
+    private var pendingTagAction: TagAction? by mutableStateOf(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,8 +37,8 @@ class MainActivity : ComponentActivity() {
             FoqosTheme {
                 FoqosApp(
                     viewModel = viewModel,
-                    onArmTagWrite = { url -> pendingTagWriteUrl = url },
-                    isArmedForTagWrite = pendingTagWriteUrl != null,
+                    pendingTagAction = pendingTagAction,
+                    onArmTagAction = { action -> pendingTagAction = action },
                 )
             }
         }
@@ -64,26 +68,38 @@ class MainActivity : ComponentActivity() {
         if (intent == null) return
 
         val tag = NfcTools.tagFrom(intent)
-        val armedUrl = pendingTagWriteUrl
+        val action = pendingTagAction
 
-        if (tag != null && armedUrl != null) {
-            pendingTagWriteUrl = null
-            when (val result = NfcTools.write(tag, armedUrl)) {
-                is NfcTools.WriteResult.Success ->
-                    viewModel.show("Tag written. Scan it to toggle this profile.")
-                is NfcTools.WriteResult.Failure -> viewModel.show(result.message)
+        if (tag != null && action != null) {
+            pendingTagAction = null
+            when (action) {
+                is TagAction.Link -> {
+                    val uid = NfcTools.tagIdFrom(intent)
+                    if (uid == null) {
+                        viewModel.show("Could not read that tag's id. Try holding it again.")
+                    } else {
+                        viewModel.linkNfcTag(action.profileId, uid)
+                    }
+                }
+
+                is TagAction.Write -> when (val result = NfcTools.write(tag, action.url)) {
+                    is NfcTools.WriteResult.Success ->
+                        viewModel.show("Tag written. Scan it to toggle this profile.")
+                    is NfcTools.WriteResult.Failure -> viewModel.show(result.message)
+                }
             }
             return
         }
 
-        NfcTools.tokenFrom(intent)?.let { token ->
-            viewModel.onTokenScanned(token, TokenSource.NFC)
+        val tokens = NfcTools.tokensFrom(intent)
+        if (tokens.isNotEmpty()) {
+            viewModel.onTokensScanned(tokens, TokenSource.NFC)
             return
         }
 
         val data = intent.data?.toString()
         if (intent.action == Intent.ACTION_VIEW && DeepLinks.profileIdFrom(data) != null) {
-            viewModel.onTokenScanned(data!!, TokenSource.DEEP_LINK)
+            viewModel.onTokensScanned(listOf(data!!), TokenSource.DEEP_LINK)
         }
     }
 }

@@ -47,7 +47,7 @@ class SessionController(
 
     suspend fun start(
         profileId: String,
-        token: String,
+        tokens: List<String>,
         source: TokenSource,
         force: Boolean = false,
     ): SessionResult = mutex.withLock {
@@ -67,13 +67,24 @@ class SessionController(
             )
         }
 
+        // Starting an NFC-only profile with no registered tag would produce a session with no
+        // way out at all, so it is refused rather than allowed and regretted.
+        if (profile.nfcOnlyUnlock &&
+            UnlockRules.hardNfcKeys(profile.physicalUnblockItems).isEmpty()
+        ) {
+            return@withLock SessionResult.Rejected(
+                "\"${profile.name}\" unlocks only with its NFC tag, and no tag is linked yet. " +
+                    "Open the profile's Tag / QR screen and hold a tag to the phone to link one."
+            )
+        }
+
         val strategy = Strategies.byId(profile.strategyId)
         val data = strategyDataOf(profile)
         val now = System.currentTimeMillis()
 
         val session = SessionEntity(
             profileId = profile.id,
-            tag = token,
+            tag = sessionTag(tokens),
             startTime = now,
             expectedEndTime = if (strategy.hasTimer) now + data.timerSeconds * 1000 else null,
             forceStarted = force,
@@ -92,7 +103,7 @@ class SessionController(
      * instead; a second token while that pause runs ends the session, which is how the iOS
      * pause-timer strategies behave.
      */
-    suspend fun stop(token: String?, source: TokenSource): SessionResult = mutex.withLock {
+    suspend fun stop(tokens: List<String>, source: TokenSource): SessionResult = mutex.withLock {
         val active = sessions.getActive()
             ?: return@withLock SessionResult.Rejected("No session is running.")
 
@@ -102,7 +113,7 @@ class SessionController(
         val expired = SessionTimeCalculator.isTimerExpired(session)
 
         if (!expired) {
-            val rejection = rejectionFor(profile, strategy, session, token, source)
+            val rejection = rejectionFor(profile, strategy, session, tokens, source)
             if (rejection != null) return@withLock SessionResult.Rejected(rejection)
         }
 
@@ -121,44 +132,77 @@ class SessionController(
      * Starts the matching profile when nothing runs, and stops the running one when the token
      * is allowed to.
      */
-    suspend fun handleToken(rawValue: String, source: TokenSource): SessionResult {
-        val token = rawValue.trim()
-        if (token.isEmpty()) return SessionResult.Rejected("Nothing readable on that tag.")
+    suspend fun handleToken(rawValues: List<String>, source: TokenSource): SessionResult {
+        val tokens = rawValues.map { it.trim() }.filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) return SessionResult.Rejected("Nothing readable on that tag.")
 
         val active = sessions.getActive()
-        if (active != null) return stop(token, source)
+        if (active != null) return stop(tokens, source)
 
-        val linkedProfileId = DeepLinks.profileIdFrom(token)
-        if (linkedProfileId != null) {
-            return start(linkedProfileId, token, source)
-        }
-
-        // No link on the token: find a profile that claims it as a physical unblock item.
+        // A profile that claims one of these tokens wins over the link the token may carry, so
+        // a tag registered as a key starts its own profile even when it also holds a link.
         val owner = profiles.getAll().firstOrNull { profile ->
-            profile.physicalUnblockItems.any { tokensMatch(it.value, token) }
-        } ?: return SessionResult.Rejected(
-            "That tag is not linked to a profile yet. Open a profile and add it under physical unlock."
-        )
+            profile.physicalUnblockItems.any { item ->
+                tokens.any { UnlockRules.tokensMatch(item.value, it) }
+            }
+        }
+        if (owner != null) return start(owner.id, tokens, source)
 
-        return start(owner.id, token, source)
+        val linkedProfileId = tokens.firstNotNullOfOrNull { DeepLinks.profileIdFrom(it) }
+            ?: return SessionResult.Rejected(
+                "That tag is not linked to a profile yet. Open a profile's Tag / QR screen and " +
+                    "hold the tag to the phone to link it."
+            )
+
+        return start(linkedProfileId, tokens, source)
     }
+
+    /**
+     * What to record as the token that started a session. A tag can present both an NDEF link
+     * and its UID; the UID is the one that cannot be reproduced from a photograph, so it is the
+     * one worth remembering.
+     */
+    private fun sessionTag(tokens: List<String>): String =
+        tokens.firstOrNull { !UnlockRules.isClonableLink(it) }
+            ?: tokens.firstOrNull()
+            ?: ""
 
     private fun rejectionFor(
         profile: ProfileEntity,
         strategy: BlockingStrategy,
         session: SessionEntity,
-        token: String?,
+        tokens: List<String>,
         source: TokenSource,
     ): String? {
         val unblockItems = profile.physicalUnblockItems
 
-        // A profile with configured unlock items only ever answers to those items.
+        // A profile with registered unlock items answers to those items and to nothing else —
+        // not the in-app button, not a link opened from a browser, and not a code of the wrong
+        // kind. This is the rule NFC-only mode rests on.
         if (unblockItems.isNotEmpty()) {
-            if (token == null) {
-                return "\"${profile.name}\" only stops with one of its saved tags or codes."
+            if (UnlockRules.matches(unblockItems, tokens, source)) return null
+
+            return when {
+                source == TokenSource.MANUAL && profile.nfcOnlyUnlock ->
+                    "\"${profile.name}\" ends only when you scan its NFC tag."
+
+                source == TokenSource.MANUAL ->
+                    "\"${profile.name}\" only stops with one of its saved tags or codes."
+
+                source == TokenSource.DEEP_LINK ->
+                    "A link cannot stop \"${profile.name}\". Scan its tag."
+
+                profile.nfcOnlyUnlock && source != TokenSource.NFC ->
+                    "\"${profile.name}\" ends only with an NFC tag."
+
+                else -> "That tag or code cannot stop \"${profile.name}\"."
             }
-            val matches = unblockItems.any { tokensMatch(it.value, token) }
-            return if (matches) null else "That tag or code cannot stop \"${profile.name}\"."
+        }
+
+        if (profile.nfcOnlyUnlock) {
+            // start() refuses to open a keyless NFC-only session and a profile cannot be edited
+            // while it runs, so this is defensive. Emergency unblock covers it, see below.
+            return "\"${profile.name}\" has no NFC tag linked. Use emergency unblock to end it."
         }
 
         if (source == TokenSource.MANUAL) {
@@ -170,11 +214,14 @@ class SessionController(
             }
         }
 
-        if (strategy.requiresSameCodeToStop && token != null && !tokensMatch(session.tag, token)) {
+        if (strategy.requiresSameCodeToStop &&
+            tokens.isNotEmpty() &&
+            tokens.none { UnlockRules.tokensMatch(session.tag, it) }
+        ) {
             return "Scan the same tag or code that started this session."
         }
 
-        if (profile.enableStrictMode && token == null) {
+        if (profile.strictModeActive && tokens.isEmpty()) {
             return "Strict mode is on: \"${profile.name}\" needs a tag or code to stop."
         }
 
@@ -197,8 +244,14 @@ class SessionController(
         val strategy = Strategies.byId(profile.strategyId)
         val session = active.session
 
-        if (!profile.enableBreaks || !strategy.allowsTimedBreaks) {
-            return@withLock SessionResult.Rejected("Breaks are turned off for \"${profile.name}\".")
+        if (!profile.breaksAllowed || !strategy.allowsTimedBreaks) {
+            return@withLock SessionResult.Rejected(
+                if (profile.nfcOnlyUnlock) {
+                    "\"${profile.name}\" unlocks only with its NFC tag, so it has no breaks."
+                } else {
+                    "Breaks are turned off for \"${profile.name}\"."
+                }
+            )
         }
         if (session.isBreakActive) return@withLock SessionResult.Info("A break is already running.")
 
@@ -309,9 +362,19 @@ class SessionController(
 
     suspend fun emergencyUnblock(): SessionResult = mutex.withLock {
         val active = sessions.getActive() ?: return@withLock SessionResult.Rejected("No session is running.")
-        if (!active.profile.enableEmergencyUnblock) {
+        // The one exception to NFC-only mode: a session whose key no longer exists would
+        // otherwise have no ending at all. start() will not create that state, so allowing it
+        // here costs nothing and removes the possibility of a truly stuck device.
+        val keyless = active.profile.nfcOnlyUnlock &&
+            UnlockRules.hardNfcKeys(active.profile.physicalUnblockItems).isEmpty()
+
+        if (!active.profile.emergencyUnblockAllowed && !keyless) {
             return@withLock SessionResult.Rejected(
-                "Emergency unblock is turned off for \"${active.profile.name}\"."
+                if (active.profile.nfcOnlyUnlock) {
+                    "\"${active.profile.name}\" ends only when you scan its NFC tag."
+                } else {
+                    "Emergency unblock is turned off for \"${active.profile.name}\"."
+                }
             )
         }
 
@@ -395,15 +458,4 @@ class SessionController(
         SessionAlarmScheduler.scheduleNextWake(context, active.session)
     }
 
-    private fun tokensMatch(a: String?, b: String?): Boolean {
-        val left = a?.trim()?.lowercase().orEmpty()
-        val right = b?.trim()?.lowercase().orEmpty()
-        if (left.isEmpty() || right.isEmpty()) return false
-        if (left == right) return true
-
-        // A tag holding a profile link and a raw profile id are the same token to a user.
-        val leftId = DeepLinks.profileIdFrom(left) ?: left
-        val rightId = DeepLinks.profileIdFrom(right) ?: right
-        return leftId == rightId
-    }
 }

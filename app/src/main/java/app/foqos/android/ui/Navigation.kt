@@ -43,8 +43,8 @@ object Routes {
 @Composable
 fun FoqosApp(
     viewModel: FoqosViewModel,
-    onArmTagWrite: (String?) -> Unit,
-    isArmedForTagWrite: Boolean,
+    pendingTagAction: TagAction?,
+    onArmTagAction: (TagAction?) -> Unit,
 ) {
     val navController: NavHostController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -116,18 +116,18 @@ fun FoqosApp(
                     viewModel = viewModel,
                     profileId = entry.arguments?.getString("profileId").orEmpty(),
                     onClose = {
-                        onArmTagWrite(null)
+                        onArmTagAction(null)
                         navController.popBackStack()
                     },
-                    onArmTagWrite = onArmTagWrite,
-                    isArmedForTagWrite = isArmedForTagWrite,
+                    pendingTagAction = pendingTagAction,
+                    onArmTagAction = onArmTagAction,
                 )
             }
 
             composable(Routes.SCAN) {
                 QrScannerScreen(
                     onResult = { value ->
-                        viewModel.onTokenScanned(value, TokenSource.QR)
+                        viewModel.onTokensScanned(listOf(value), TokenSource.QR)
                         navController.popBackStack()
                     },
                     onCancel = { navController.popBackStack() },

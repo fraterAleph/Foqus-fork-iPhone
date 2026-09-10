@@ -155,13 +155,13 @@ private fun ShieldScreen(
                     SessionTimeCalculator.elapsedFocusMs(active.session)
                 )} focused"
             }
-            breakAvailable = active.profile.enableBreaks &&
+            breakAvailable = active.profile.breaksAllowed &&
                 SessionTimeCalculator.remainingBreakMs(
                     active.session,
                     active.profile.breakTimeInMinutes,
                     active.profile.allowMultipleBreaks,
                 ) > 0 && !active.session.isBreakActive
-            emergencyAvailable = active.profile.enableEmergencyUnblock
+            emergencyAvailable = active.profile.emergencyUnblockAllowed
             delay(1000)
         }
     }

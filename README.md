@@ -55,6 +55,30 @@ requires that the API be used for accessibility purposes, and app blockers using
 rejected or removed. Plan on distributing this through F-Droid, GitHub releases, or a sideloaded
 APK rather than Play. That is a policy problem, not a technical one — the app itself works.
 
+## NFC-only unlock (the default)
+
+A new profile is created with **Unlock only with an NFC tag** on. While it is on, a running
+session ends one way and one way only: hold the linked tag to the phone. The in-app Stop button
+refuses, breaks and emergency unblocks are off, a QR code with the same value refuses, and a
+`foqos.app/profile/…` link opened from a browser refuses. Turning the switch off restores the
+normal strategies, breaks and emergency unblocks.
+
+Two details make this hold rather than merely look strict:
+
+- **A key is a tag's hardware UID, not the link written on it.** A profile link is text — anyone
+  who scans the tag once can reprint it as a QR code. Linking a tag on its Tag / QR screen stores
+  the UID, which cannot be reproduced from a photograph. Writing a link to a tag is still offered
+  for compatibility with the iOS app, and the screen says plainly that a written link starts
+  sessions but never ends one.
+- **A profile cannot be edited while its session runs.** Otherwise deleting the key mid-session
+  would be the escape hatch. For the same reason a profile refuses to start at all when NFC-only
+  is on and no tag is linked, and emergency unblock stays available in that one state so a
+  keyless session can never strand the device.
+
+What this does not do is change the table above: a user who goes into Android's settings can
+still switch the accessibility service off or force-stop Foqos. NFC-only unlocking closes every
+route through the app; only device owner closes the routes through the OS.
+
 ## Blocking strategies
 
 Ids match the iOS app, so a profile means the same thing on both platforms.
