@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Foqos</string>
+    <string name="accessibility_service_label">Foqos app blocking</string>
+    <string name="accessibility_service_description">Foqos watches which app comes to the foreground so it can show the focus shield over apps you chose to block during a session. Foqos reads only the package name of the foreground app. Nothing is recorded, sent anywhere, or stored beyond the running session.</string>
+    <string name="device_admin_description">Lets Foqos suspend blocked apps at the system level. Only available when Foqos is provisioned as device owner via ADB.</string>
+    <string name="session_channel_name">Focus sessions</string>
+    <string name="session_channel_description">Shows the running focus session, its timer and break controls.</string>
+</resources>
