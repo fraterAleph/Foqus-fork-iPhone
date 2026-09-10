@@ -19,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.foqos.android.qr.QrScannerScreen
 import app.foqos.android.session.TokenSource
+import app.foqos.android.ui.screens.DeviceOwnerScreen
 import app.foqos.android.ui.screens.HomeScreen
 import app.foqos.android.ui.screens.InsightsScreen
 import app.foqos.android.ui.screens.IntroScreen
@@ -34,6 +35,7 @@ object Routes {
     const val SCAN = "scan"
     const val INSIGHTS = "insights"
     const val SETTINGS = "settings"
+    const val DEVICE_OWNER = "device-owner"
 
     fun profile(id: String) = "profile/$id"
     fun share(id: String) = "share/$id"
@@ -139,7 +141,18 @@ fun FoqosApp(
             }
 
             composable(Routes.SETTINGS) {
-                SettingsScreen(viewModel = viewModel, onClose = { navController.popBackStack() })
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onClose = { navController.popBackStack() },
+                    onOpenDeviceOwnerGuide = { navController.navigate(Routes.DEVICE_OWNER) },
+                )
+            }
+
+            composable(Routes.DEVICE_OWNER) {
+                DeviceOwnerScreen(
+                    viewModel = viewModel,
+                    onClose = { navController.popBackStack() },
+                )
             }
         }
     }

@@ -3,6 +3,7 @@ package app.foqos.android.blocking
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.os.UserManager
 import android.util.Log
 
 /**
@@ -47,6 +48,32 @@ object DeviceOwnerBlocker {
             Log.w(TAG, "Suspending packages failed", it)
             packages
         }
+    }
+
+    /**
+     * Closes the routes around the shield that only a device owner can close: uninstalling Foqos
+     * and rebooting into safe mode, where accessibility services do not start.
+     *
+     * Applied while a session runs and released when it ends, so a device owner install is not
+     * permanently harder to undo than it needs to be. Factory reset is deliberately left alone —
+     * blocking it is the one restriction that can leave a phone with no way back.
+     */
+    fun harden(context: Context, enabled: Boolean) {
+        if (!isAvailable(context)) return
+        val manager = dpm(context) ?: return
+        val admin = admin(context)
+
+        runCatching {
+            manager.setUninstallBlocked(admin, context.packageName, enabled)
+        }.onFailure { Log.w(TAG, "Could not change the uninstall block", it) }
+
+        runCatching {
+            if (enabled) {
+                manager.addUserRestriction(admin, UserManager.DISALLOW_SAFE_BOOT)
+            } else {
+                manager.clearUserRestriction(admin, UserManager.DISALLOW_SAFE_BOOT)
+            }
+        }.onFailure { Log.w(TAG, "Could not change the safe boot restriction", it) }
     }
 
     fun unsuspend(context: Context, packages: Set<String>) {

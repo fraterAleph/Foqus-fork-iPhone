@@ -40,7 +40,11 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: FoqosViewModel, onClose: () -> Unit) {
+fun SettingsScreen(
+    viewModel: FoqosViewModel,
+    onClose: () -> Unit,
+    onOpenDeviceOwnerGuide: () -> Unit,
+) {
     val context = LocalContext.current
     val settings by viewModel.settings.collectAsState()
 
@@ -190,14 +194,29 @@ fun SettingsScreen(viewModel: FoqosViewModel, onClose: () -> Unit) {
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        "With device owner set, Foqos suspends blocked apps at the system level " +
-                            "and the shield cannot be switched off from Settings. It has to be " +
-                            "granted over ADB on a device with no accounts added:\n\n" +
-                            "adb shell dpm set-device-owner " +
-                            "app.foqos.android/.blocking.FoqosDeviceAdminReceiver",
+                        if (viewModel.engine.isDeviceOwner) {
+                            "Blocked apps will not launch at all during a session, and Foqos " +
+                                "cannot be uninstalled or bypassed through safe mode."
+                        } else {
+                            "The only blocking on Android that cannot be switched off in " +
+                                "Settings. Setting it up needs a computer and a factory reset, " +
+                                "so it suits a spare phone rather than your main one."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Button(
+                        onClick = onOpenDeviceOwnerGuide,
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) {
+                        Text(
+                            if (viewModel.engine.isDeviceOwner) {
+                                "How to turn it off"
+                            } else {
+                                "How to set it up"
+                            }
+                        )
+                    }
                 }
             }
 

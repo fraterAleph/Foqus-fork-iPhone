@@ -44,6 +44,11 @@ device with no accounts added:
 adb shell dpm set-device-owner app.foqos.android/.blocking.FoqosDeviceAdminReceiver
 ```
 
+Settings carries a step-by-step guide for this, written for someone who has never opened a
+terminal, and it says up front that the setup needs a factory reset and suits a spare phone
+rather than a main one. Once device owner is set, a running session also blocks uninstalling
+Foqos and booting into safe mode; factory reset is deliberately left available.
+
 Website blocking answers DNS from a local tunnel. Two limits come with that: only one VPN can be
 active at a time, so it conflicts with a real VPN; and an app with its own DNS-over-HTTPS resolver
 (Chrome's secure DNS, for example) never asks the system resolver and is not filtered.

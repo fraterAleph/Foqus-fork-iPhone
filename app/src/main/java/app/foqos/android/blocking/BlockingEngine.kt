@@ -43,6 +43,7 @@ class BlockingEngine(private val context: Context) {
         )
 
         applyDeviceOwner(packages, profile.enableAllowMode)
+        DeviceOwnerBlocker.harden(context, enabled = true)
         applyDomainRules(profile)
     }
 
@@ -75,6 +76,7 @@ class BlockingEngine(private val context: Context) {
 
     fun deactivate() {
         BlockingState.clear(context)
+        DeviceOwnerBlocker.harden(context, enabled = false)
         releaseDeviceOwner()
         DomainRules.clear(context)
         DomainBlockerVpnService.stop(context)
