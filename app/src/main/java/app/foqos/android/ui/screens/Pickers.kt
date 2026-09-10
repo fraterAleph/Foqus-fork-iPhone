@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -58,10 +59,7 @@ fun AppPickerDialog(
 
     LaunchedEffect(Unit) { apps = InstalledAppsProvider.load(context) }
 
-    val visible = remember(apps, query) {
-        if (query.isBlank()) apps
-        else apps.filter { it.label.contains(query, ignoreCase = true) }
-    }
+    val visible = remember(apps, query) { apps.filter { it.matches(query) } }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -101,6 +99,9 @@ fun AppPickerDialog(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
+                        // A dialog window does not report the system bar insets the way the
+                        // main window does, so the room for them is reserved here instead.
+                        contentPadding = PaddingValues(bottom = 96.dp),
                     ) {
                         items(visible, key = { it.packageName }) { app ->
                             Row(
@@ -170,6 +171,7 @@ fun StrategyPickerDialog(
                         .padding(padding)
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
                     Strategies.grouped().forEach { (category, strategies) ->
                         item(key = "header-${category.name}") {

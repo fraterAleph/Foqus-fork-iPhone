@@ -28,7 +28,7 @@ object SafePackages {
 
     private fun launcherPackages(pm: PackageManager): Set<String> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        return pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        return pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
             .mapNotNull { it.activityInfo?.packageName }
             .toSet()
     }
