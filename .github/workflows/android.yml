@@ -6,9 +6,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.console=plain -Dorg.gradle.daemon=false
+  TERM: dumb
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     steps:
       - uses: actions/checkout@v4
@@ -18,18 +27,26 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+      # Split out so a stall shows up against the phase that caused it rather than
+      # against a single opaque build step.
+      - name: Gradle wrapper
+        timeout-minutes: 8
+        run: ./gradlew --version --no-daemon
 
       - name: Assemble debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        timeout-minutes: 25
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Unit tests
+        timeout-minutes: 15
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -37,3 +54,11 @@ jobs:
           name: foqos-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore

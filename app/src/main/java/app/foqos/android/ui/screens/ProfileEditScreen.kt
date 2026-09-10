@@ -38,6 +38,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import app.foqos.android.blocking.vpn.DomainBlockerVpnService
 import app.foqos.android.data.db.ProfileEntity
 import app.foqos.android.data.model.StrategyData
 import app.foqos.android.strategy.Strategies
@@ -61,6 +65,14 @@ fun ProfileEditScreen(
     var showStrategyPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var newDomain by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val vpnConsentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != android.app.Activity.RESULT_OK) {
+            viewModel.show("Website blocking needs the VPN permission to run its DNS filter.")
+        }
+    }
 
     LaunchedEffect(profileId) {
         val loaded = if (profileId == Routes.NEW_PROFILE) {
@@ -223,7 +235,13 @@ fun ProfileEditScreen(
                         description = "Runs a local DNS filter. Only one VPN can be active at a " +
                             "time, and apps with their own secure DNS bypass it.",
                         checked = current.enableDomainBlocking,
-                        onCheckedChange = { profile = current.copy(enableDomainBlocking = it) },
+                        onCheckedChange = { enabled ->
+                            profile = current.copy(enableDomainBlocking = enabled)
+                            if (enabled) {
+                                DomainBlockerVpnService.consentIntent(context)
+                                    ?.let(vpnConsentLauncher::launch)
+                            }
+                        },
                     )
 
                     if (current.enableDomainBlocking) {

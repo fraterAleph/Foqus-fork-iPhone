@@ -177,7 +177,8 @@ class DomainBlockerVpnService : VpnService() {
 
         fun start(context: Context) {
             val intent = Intent(context, DomainBlockerVpnService::class.java)
-            context.startService(intent)
+            // Called from receivers too, where a background start can be refused outright.
+            runCatching { context.startService(intent) }
         }
 
         fun stop(context: Context) {
